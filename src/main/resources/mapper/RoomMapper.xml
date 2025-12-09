@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.tomato.mapper.RoomMapper">
+    
+    <select id="selectRoomsWithMemberCount" resultType="com.tomato.entity.Room">
+        SELECT r.*, COUNT(rm.id) as member_count
+        FROM room r
+        LEFT JOIN roommember rm ON r.room_id = rm.room_id AND rm.status = 'active'
+        GROUP BY r.room_id
+        ORDER BY r.created_at DESC
+    </select>
+    
+</mapper>
+

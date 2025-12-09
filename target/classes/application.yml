@@ -1,0 +1,51 @@
+server:
+  port: 8090
+  servlet:
+    context-path: /api
+
+spring:
+  application:
+    name: tomato-backend
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/tomato_study_room?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    username: root
+    password: 1939366582
+  jackson:
+    time-zone: GMT+8
+    date-format: yyyy-MM-dd HH:mm:ss
+  servlet:
+    multipart:
+          enabled: true
+          max-file-size: 5MB
+          max-request-size: 10MB
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  mapper-locations: classpath:mapper/*.xml
+  type-aliases-package: com.tomato.entity
+  global-config:
+    db-config:
+      id-type: auto
+      table-underline: true
+
+# JWT配置
+jwt:
+  secret: replace-with-a-long-random-secret-key-1234567890abcd
+  expiration-ms: 3600000
+
+logging:
+  level:
+    com.tomato: debug
+    org.springframework.web: info
+
+# 文件上传配置
+
+# 文件存储配置
+file:
+  upload:
+    path: ./uploads/avatars
+    url-prefix: /api/uploads/avatars
+
