@@ -16,6 +16,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -72,13 +73,15 @@ public class RoomServiceImpl extends ServiceImpl<RoomMapper, Room> implements Ro
         if (dto.getEndTime() != null) {
             room.setEndTime(dto.getEndTime());
         }
+        room.setCreatedAt(LocalDateTime.now());
+        room.setUpdatedAt(LocalDateTime.now());
         save(room);
 
         RoomMember member = new RoomMember();
         member.setRoomId(room.getRoomId());
         member.setUserId(room.getCreatePerson());
         member.setRole(MEMBER_ROLE_HOST);
-        member.setStatus(MEMBER_STATUS_FOCUS);
+        member.setStatus(MEMBER_STATUS_REST);
         member.setSessionFocusDuration(0);
         roomMemberMapper.insert(member);
 
@@ -96,6 +99,7 @@ public class RoomServiceImpl extends ServiceImpl<RoomMapper, Room> implements Ro
             room.setEndTime(dto.getEndTime());
         }
         if (dto.getMusicName() != null) room.setMusicName(dto.getMusicName());
+        room.setUpdatedAt(LocalDateTime.now());
 
         updateById(room);
         return room;
@@ -273,6 +277,38 @@ public class RoomServiceImpl extends ServiceImpl<RoomMapper, Room> implements Ro
 
     private boolean isActiveStatus(String status) {
         return MEMBER_STATUS_FOCUS.equals(status) || "active".equalsIgnoreCase(status);
+    }
+
+    @Override
+    @Transactional
+    public void updateMemberStatus(Long roomId, Long userId, String status) {
+        if (roomId == null || userId == null || status == null) {
+            throw new IllegalArgumentException("roomId、userId、status 不能为空");
+        }
+        Room room = findRoomByBusinessId(roomId); // 校验房间存在
+        LambdaQueryWrapper<RoomMember> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(RoomMember::getRoomId, roomId).eq(RoomMember::getUserId, userId);
+        RoomMember member = roomMemberMapper.selectOne(wrapper);
+        if (member == null) {
+            throw new IllegalArgumentException("成员不在房间中");
+        }
+
+        String normalized;
+        switch (status.toLowerCase()) {
+            case "focusing":
+            case "focus":
+            case "专注中":
+            case "专注":
+                normalized = MEMBER_STATUS_FOCUS; break;
+            case "resting":
+            case "rest":
+            case "休息中":
+            case "休息":
+            default:
+                normalized = MEMBER_STATUS_REST;
+        }
+        member.setStatus(normalized);
+        roomMemberMapper.updateById(member);
     }
 }
 

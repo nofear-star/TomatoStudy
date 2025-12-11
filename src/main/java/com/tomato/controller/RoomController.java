@@ -43,7 +43,7 @@ public class RoomController {
     /**
      * 创建自习室
      */
-    @PostMapping
+    @PostMapping(consumes = "application/json", produces = "application/json")
     public ResponseEntity<ApiResponse<RoomResponseDTO>> createRoom(@Valid @RequestBody RoomCreateDTO dto) {
         Room room = roomService.createRoom(dto);
         return ResponseEntity.ok(ApiResponse.success(convertToResponseDTO(room)));
@@ -133,6 +133,15 @@ public class RoomController {
         RoomResponseDTO dto = new RoomResponseDTO();
         BeanUtils.copyProperties(room, dto);
         return dto;
+    }
+
+    @PutMapping("/{roomId}/status")
+    public ResponseEntity<ApiResponse<Void>> updateMemberStatus(@PathVariable Long roomId,
+                                                                @RequestBody Map<String, Object> payload) {
+        Long userId = payload.get("userId") != null ? Long.valueOf(payload.get("userId").toString()) : null;
+        String status = payload.get("status") != null ? payload.get("status").toString() : null;
+        roomService.updateMemberStatus(roomId, userId, status);
+        return ResponseEntity.ok(ApiResponse.success("状态更新成功", null));
     }
 }
 
