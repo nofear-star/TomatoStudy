@@ -12,5 +12,6 @@ public class CurrencyResponse {
     private Integer coins;
     private Integer check_day; // 本月签到天数
     private String updated_at; // 格式: "YYYY-MM-DD"
+    private Boolean has_checked_in_today; // 今天是否已签到
 }
 

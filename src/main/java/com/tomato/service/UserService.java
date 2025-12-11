@@ -33,6 +33,7 @@ public class UserService {
     private final UserReportMapper userReportMapper;
     private final FriendRequestMapper friendRequestMapper;
     private final FriendMapper friendMapper;
+    private final CheckInRecordMapper checkInRecordMapper;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
     private final ObjectMapper objectMapper;
@@ -45,6 +46,7 @@ public class UserService {
                        UserReportMapper userReportMapper,
                        FriendRequestMapper friendRequestMapper,
                        FriendMapper friendMapper,
+                       CheckInRecordMapper checkInRecordMapper,
                        PasswordEncoder passwordEncoder, 
                        JwtUtil jwtUtil,
                        ObjectMapper objectMapper,
@@ -56,6 +58,7 @@ public class UserService {
         this.userReportMapper = userReportMapper;
         this.friendRequestMapper = friendRequestMapper;
         this.friendMapper = friendMapper;
+        this.checkInRecordMapper = checkInRecordMapper;
         this.passwordEncoder = passwordEncoder;
         this.jwtUtil = jwtUtil;
         this.objectMapper = objectMapper;
@@ -370,11 +373,117 @@ public class UserService {
                     .build();
         }
 
-        CurrencyResponse currencyResponse = convertToCurrencyResponse(currency);
+        CurrencyResponse currencyResponse = convertToCurrencyResponse(currency, userId);
 
         return ApiResponse.<CurrencyResponse>builder()
                 .success(true)
                 .message("获取成功")
+                .data(currencyResponse)
+                .build();
+    }
+
+    /**
+     * 获取用户本月所有签到日期
+     */
+    public ApiResponse<List<String>> getCurrentMonthCheckInDates(String token) {
+        Long userId = getUserIdFromToken(token);
+        if (userId == null) {
+            return ApiResponse.<List<String>>builder()
+                    .success(false)
+                    .message("无效的 token")
+                    .build();
+        }
+
+        LocalDate today = LocalDate.now();
+        int year = today.getYear();
+        int month = today.getMonthValue();
+
+        List<LocalDate> checkInDates = checkInRecordMapper.findCheckInDatesByMonth(userId, year, month);
+        
+        // 转换为字符串列表（格式：YYYY-MM-DD）
+        List<String> dateStrings = checkInDates.stream()
+                .map(date -> date.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")))
+                .collect(Collectors.toList());
+
+        return ApiResponse.<List<String>>builder()
+                .success(true)
+                .message("获取成功")
+                .data(dateStrings)
+                .build();
+    }
+
+    /**
+     * 每日签到
+     * 功能：
+     * 1. 检查今天是否已签到
+     * 2. 如果未签到，创建签到记录
+     * 3. 更新用户货币表（增加1个番茄，更新本月签到天数）
+     * 4. 更新users表的tomato字段
+     */
+    @Transactional
+    public ApiResponse<CurrencyResponse> dailyCheckIn(String token) {
+        Long userId = getUserIdFromToken(token);
+        if (userId == null) {
+            return ApiResponse.<CurrencyResponse>builder()
+                    .success(false)
+                    .message("无效的 token")
+                    .build();
+        }
+
+        // 获取今天的日期
+        LocalDate today = LocalDate.now();
+
+        // 检查今天是否已签到
+        CheckInRecord existingRecord = checkInRecordMapper.findByUserIdAndDate(userId, today);
+        if (existingRecord != null) {
+            return ApiResponse.<CurrencyResponse>builder()
+                    .success(false)
+                    .message("今日已签到，请明天再来")
+                    .build();
+        }
+
+        // 创建签到记录
+        CheckInRecord checkInRecord = new CheckInRecord();
+        checkInRecord.setUserId(userId);
+        checkInRecord.setCheckinDate(today);
+        checkInRecord.setCreatedAt(LocalDateTime.now());
+        checkInRecordMapper.insert(checkInRecord);
+
+        // 获取或创建用户货币记录
+        UserCurrency currency = userCurrencyMapper.findByUserId(userId);
+        if (currency == null) {
+            // 如果不存在，创建新的货币记录
+            currency = new UserCurrency();
+            currency.setUserId(userId);
+            currency.setCoins(0);
+            currency.setCheckDay(0);
+            currency.setUpdatedAt(LocalDateTime.now());
+            userCurrencyMapper.insert(currency);
+        }
+
+        // 更新本月签到天数
+        int currentYear = today.getYear();
+        int currentMonth = today.getMonthValue();
+        Integer checkInDays = checkInRecordMapper.countCheckInDaysByMonth(userId, currentYear, currentMonth);
+        currency.setCheckDay(checkInDays != null ? checkInDays : 1);
+        currency.setUpdatedAt(LocalDateTime.now());
+        userCurrencyMapper.updateById(currency);
+
+        // 更新users表的tomato字段（增加1个番茄）
+        User user = userMapper.findByUserId(userId);
+        if (user != null) {
+            int currentTomatoes = user.getTomato() != null ? user.getTomato() : 0;
+            user.setTomato(currentTomatoes + 1);
+            userMapper.updateById(user);
+        }
+
+        // 返回更新后的货币信息
+        UserCurrency updatedCurrency = userCurrencyMapper.findByUserId(userId);
+        CurrencyResponse currencyResponse = convertToCurrencyResponse(updatedCurrency, userId);
+
+        return ApiResponse.<CurrencyResponse>builder()
+                .success(true)
+                .message("签到成功！获得 1 个番茄 🍅")
                 .data(currencyResponse)
                 .build();
     }
@@ -1302,9 +1411,16 @@ public class UserService {
     }
 
     /**
-     * 将 UserCurrency 实体转换为 CurrencyResponse DTO
+     * 将 UserCurrency 实体转换为 CurrencyResponse DTO（不带签到状态，用于兼容旧代码）
      */
     private CurrencyResponse convertToCurrencyResponse(UserCurrency currency) {
+        return convertToCurrencyResponse(currency, null);
+    }
+
+    /**
+     * 将 UserCurrency 实体转换为 CurrencyResponse DTO（带签到状态）
+     */
+    private CurrencyResponse convertToCurrencyResponse(UserCurrency currency, Long userId) {
         DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
         
         String updatedAtStr = null;
@@ -1312,11 +1428,20 @@ public class UserService {
             updatedAtStr = currency.getUpdatedAt().format(dateFormatter);
         }
         
+        // 检查今天是否已签到
+        Boolean hasCheckedInToday = false;
+        if (userId != null) {
+            LocalDate today = LocalDate.now();
+            CheckInRecord todayRecord = checkInRecordMapper.findByUserIdAndDate(userId, today);
+            hasCheckedInToday = (todayRecord != null);
+        }
+        
         return CurrencyResponse.builder()
                 .user_id(currency.getUserId())
                 .coins(currency.getCoins())
                 .check_day(currency.getCheckDay())
                 .updated_at(updatedAtStr)
+                .has_checked_in_today(hasCheckedInToday)
                 .build();
     }
 
