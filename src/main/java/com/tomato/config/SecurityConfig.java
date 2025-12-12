@@ -31,7 +31,7 @@ public class SecurityConfig {
                         .requestMatchers("/uploads/**").permitAll() // 允许访问上传的文件
                         .requestMatchers("/user/**", "/users/**", "/me", "/me/**", 
                                 "/focus", "/focus/**", "/tasks", "/tasks/**", "/friends/**", 
-                                "/rooms/**", "/resources/**", "/system/**").authenticated()
+                                "/rooms/**", "/resources/**", "/system/**", "/ai/**").authenticated()
                         .anyRequest().permitAll() // 允许其他请求，方便调试
                 )
                 .httpBasic(basic -> basic.disable())

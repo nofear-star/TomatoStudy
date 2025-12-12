@@ -49,3 +49,12 @@ file:
     path: ./uploads/avatars
     url-prefix: /api/uploads/avatars
 
+# 通义千问API配置
+tongyi:
+  api:
+    # API Key配置：可以通过环境变量 TONGYI_API_KEY 设置，或直接在这里填写
+    key: ${TONGYI_API_KEY:sk-7461c4bd9c9f44c7aeab066614ff2241}
+    # 免费模型URL（兼容OpenAI格式）
+    # 使用 qwen-turbo 免费模型
+    url: https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions
+
