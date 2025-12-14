@@ -8,6 +8,7 @@ import lombok.*;
 @AllArgsConstructor
 @Builder
 public class TaskResponse {
+    private Long task_id;
     private Long user_id;
     private String task_name;
     private String task_note;
