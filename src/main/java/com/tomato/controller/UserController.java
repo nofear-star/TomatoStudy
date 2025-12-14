@@ -10,6 +10,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.List;
+
 @RestController
 public class UserController {
 
@@ -175,6 +177,65 @@ public class UserController {
         }
 
         ApiResponse<CurrencyResponse> resp = userService.getCurrentUserCurrency(token);
+        
+        if (resp.isSuccess()) {
+            // 直接返回数据对象，符合用户要求的格式
+            return ResponseEntity.ok(resp.getData());
+        } else {
+            return ResponseEntity.status(400).body(
+                    ApiResponse.<CurrencyResponse>builder()
+                            .success(false)
+                            .message(resp.getMessage())
+                            .build()
+            );
+        }
+    }
+
+    /**
+     * 获取用户本月所有签到日期
+     */
+    @GetMapping(value = "/me/checkin/dates", produces = "application/json")
+    public ResponseEntity<?> getCurrentMonthCheckInDates(HttpServletRequest request) {
+        String token = extractToken(request);
+        if (token == null) {
+            return ResponseEntity.badRequest().body(
+                    ApiResponse.<List<String>>builder()
+                            .success(false)
+                            .message("缺少 Authorization 头，格式应为: Bearer <token>")
+                            .build()
+            );
+        }
+
+        ApiResponse<List<String>> resp = userService.getCurrentMonthCheckInDates(token);
+        
+        if (resp.isSuccess()) {
+            return ResponseEntity.ok(resp.getData());
+        } else {
+            return ResponseEntity.status(400).body(
+                    ApiResponse.<List<String>>builder()
+                            .success(false)
+                            .message(resp.getMessage())
+                            .build()
+            );
+        }
+    }
+
+    /**
+     * 每日签到
+     */
+    @PostMapping(value = "/me/checkin", produces = "application/json")
+    public ResponseEntity<?> dailyCheckIn(HttpServletRequest request) {
+        String token = extractToken(request);
+        if (token == null) {
+            return ResponseEntity.badRequest().body(
+                    ApiResponse.<CurrencyResponse>builder()
+                            .success(false)
+                            .message("缺少 Authorization 头，格式应为: Bearer <token>")
+                            .build()
+            );
+        }
+
+        ApiResponse<CurrencyResponse> resp = userService.dailyCheckIn(token);
         
         if (resp.isSuccess()) {
             // 直接返回数据对象，符合用户要求的格式
