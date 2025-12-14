@@ -1488,6 +1488,7 @@ public class UserService {
         }
         
         return TaskResponse.builder()
+                .task_id(task.getTaskId())
                 .user_id(task.getUserId())
                 .task_name(task.getTaskName())
                 .task_note(task.getTaskNote())

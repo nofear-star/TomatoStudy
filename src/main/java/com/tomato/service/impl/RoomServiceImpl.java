@@ -168,8 +168,7 @@ public class RoomServiceImpl extends ServiceImpl<RoomMapper, Room> implements Ro
     public void leaveRoom(Long roomId, Long userId) {
         LambdaQueryWrapper<RoomMember> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(RoomMember::getRoomId, roomId)
-               .eq(RoomMember::getUserId, userId)
-               .in(RoomMember::getStatus, MEMBER_STATUS_FOCUS, "active");
+               .eq(RoomMember::getUserId, userId);
         RoomMember member = roomMemberMapper.selectOne(wrapper);
         if (member == null) {
             throw new IllegalArgumentException("您不在此自习室中");
@@ -178,8 +177,8 @@ public class RoomServiceImpl extends ServiceImpl<RoomMapper, Room> implements Ro
             throw new IllegalArgumentException("房主无法直接离开，请解散自习室");
         }
 
-        member.setStatus(MEMBER_STATUS_REST);
-        roomMemberMapper.updateById(member);
+        // 真正删除成员记录，从房间成员列表中移除
+        roomMemberMapper.deleteById(member.getId());
     }
 
     @Override
