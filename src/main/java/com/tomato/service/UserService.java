@@ -17,7 +17,6 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -941,17 +940,19 @@ public class UserService {
             return response;
         }
 
-        // 查找未完成的任务（状态为"未完成"）
-        List<Task> tasks = taskMapper.findByUserIdAndStatus(userId, "未完成");
-        if (tasks.isEmpty()) {
+        if (req.getTask_id() == null) {
             response.put("success", false);
-            response.put("message", "没有可编辑的任务");
+            response.put("message", "任务ID不能为空");
             return response;
         }
-        // 获取最近创建的未完成任务
-        Task task = tasks.stream()
-                .max(Comparator.comparing(Task::getCreatedAt))
-                .orElse(tasks.get(0));
+
+        // 根据 task_id 精确查找任务
+        Task task = taskMapper.findByTaskIdAndUserId(req.getTask_id(), userId);
+        if (task == null) {
+            response.put("success", false);
+            response.put("message", "任务不存在或无权编辑");
+            return response;
+        }
 
         // 更新任务字段（只更新提供的字段）
         boolean hasUpdate = false;
@@ -967,6 +968,10 @@ public class UserService {
             task.setDuration(req.getDuration());
             hasUpdate = true;
         }
+        if (req.getStatus() != null && !req.getStatus().trim().isEmpty()) {
+            task.setStatus(req.getStatus().trim());
+            hasUpdate = true;
+        }
 
         if (!hasUpdate) {
             response.put("success", false);
@@ -976,6 +981,7 @@ public class UserService {
             response.put("task_name", task.getTaskName());
             response.put("task_note", task.getTaskNote());
             response.put("duration", task.getDuration());
+            response.put("status", task.getStatus());
             if (task.getUpdatedAt() != null) {
                 response.put("updated_at", task.getUpdatedAt().format(DateTimeFormatter.ofPattern("yyyy-MM-dd")));
             } else {
@@ -999,6 +1005,7 @@ public class UserService {
         response.put("task_name", task.getTaskName());
         response.put("task_note", task.getTaskNote());
         response.put("duration", task.getDuration());
+        response.put("status", task.getStatus());
         response.put("updated_at", now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")));
 
         return response;
