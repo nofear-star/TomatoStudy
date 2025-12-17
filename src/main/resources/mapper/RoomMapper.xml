@@ -6,7 +6,8 @@
     <select id="selectRoomsWithMemberCount" resultType="com.tomato.entity.Room">
         SELECT r.*, COUNT(rm.id) as member_count
         FROM room r
-        LEFT JOIN roommember rm ON r.room_id = rm.room_id AND rm.status = 'active'
+        LEFT JOIN roommember rm ON r.room_id = rm.room_id
+            AND rm.status IN ('专注中', '休息中')
         GROUP BY r.room_id
         ORDER BY r.created_at DESC
     </select>

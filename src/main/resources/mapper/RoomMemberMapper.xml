@@ -12,7 +12,7 @@
     <select id="countActiveMembersByRoomId" resultType="java.lang.Integer">
         SELECT COUNT(*) FROM roommember
         WHERE room_id = #{roomId}
-          AND status IN ('专注中', 'active')
+          AND status IN ('专注中', '休息中')
     </select>
     
 </mapper>
