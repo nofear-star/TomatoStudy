@@ -22,23 +22,138 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
     private final TokenBlacklistService tokenBlacklistService;
+    private final VerificationCodeService verificationCodeService;
+    private final EmailService emailService;
 
     public AuthService(UserMapper userMapper,
                        UserCurrencyMapper userCurrencyMapper,
                        UserPrivacyMapper userPrivacyMapper,
                        PasswordEncoder passwordEncoder,
                        JwtUtil jwtUtil,
-                       TokenBlacklistService tokenBlacklistService) {
+                       TokenBlacklistService tokenBlacklistService,
+                       VerificationCodeService verificationCodeService,
+                       EmailService emailService) {
         this.userMapper = userMapper;
         this.userCurrencyMapper = userCurrencyMapper;
         this.userPrivacyMapper = userPrivacyMapper;
         this.passwordEncoder = passwordEncoder;
         this.jwtUtil = jwtUtil;
         this.tokenBlacklistService = tokenBlacklistService;
+        this.verificationCodeService = verificationCodeService;
+        this.emailService = emailService;
+    }
+
+    /**
+     * 发送验证码（注册用）
+     */
+    public ApiResponse<Void> sendVerificationCode(String email) {
+        // 验证邮箱格式（支持所有常见邮箱，包括QQ邮箱）
+        if (email == null || email.trim().isEmpty()) {
+            return ApiResponse.<Void>builder().success(false).message("邮箱不能为空").build();
+        }
+        
+        // 更严格的邮箱格式验证（支持QQ邮箱：数字@qq.com 或 自定义@qq.com）
+        String emailPattern = "^[A-Za-z0-9]+([._-][A-Za-z0-9]+)*@([A-Za-z0-9]+[-]?[A-Za-z0-9]+\\.)+[A-Za-z]{2,}$";
+        if (!email.matches(emailPattern)) {
+            return ApiResponse.<Void>builder().success(false).message("邮箱格式不正确，请输入有效的邮箱地址（支持QQ邮箱、163邮箱等）").build();
+        }
+        
+        // 检查邮箱是否已被注册
+        if (userMapper.existsByEmail(email)) {
+            return ApiResponse.<Void>builder().success(false).message("该邮箱已被注册").build();
+        }
+        
+        // 生成并发送验证码
+        String code = verificationCodeService.generateAndStoreCode(email);
+        emailService.sendVerificationCode(email, code);
+        
+        return ApiResponse.<Void>builder().success(true).message("验证码已发送到您的邮箱").build();
+    }
+
+    /**
+     * 发送重置密码验证码
+     */
+    public ApiResponse<Void> sendResetPasswordCode(String email) {
+        // 验证邮箱格式
+        if (email == null || email.trim().isEmpty()) {
+            return ApiResponse.<Void>builder().success(false).message("邮箱不能为空").build();
+        }
+        
+        String emailPattern = "^[A-Za-z0-9]+([._-][A-Za-z0-9]+)*@([A-Za-z0-9]+[-]?[A-Za-z0-9]+\\.)+[A-Za-z]{2,}$";
+        if (!email.matches(emailPattern)) {
+            return ApiResponse.<Void>builder().success(false).message("邮箱格式不正确，请输入有效的邮箱地址").build();
+        }
+        
+        // 检查邮箱是否已注册（重置密码需要邮箱已注册）
+        if (!userMapper.existsByEmail(email)) {
+            return ApiResponse.<Void>builder().success(false).message("该邮箱未注册，请先注册账户").build();
+        }
+        
+        // 生成并发送验证码（使用不同的key前缀区分重置密码验证码）
+        String codeKey = "reset:" + email;
+        String code = verificationCodeService.generateAndStoreCode(codeKey);
+        emailService.sendResetPasswordCode(email, code);
+        
+        return ApiResponse.<Void>builder().success(true).message("验证码已发送到您的邮箱").build();
+    }
+
+    /**
+     * 重置密码
+     */
+    @Transactional
+    public ApiResponse<Void> resetPassword(String email, String verificationCode, String newPassword) {
+        // 验证邮箱格式
+        if (email == null || email.trim().isEmpty()) {
+            return ApiResponse.<Void>builder().success(false).message("邮箱不能为空").build();
+        }
+        
+        String emailPattern = "^[A-Za-z0-9]+([._-][A-Za-z0-9]+)*@([A-Za-z0-9]+[-]?[A-Za-z0-9]+\\.)+[A-Za-z]{2,}$";
+        if (!email.matches(emailPattern)) {
+            return ApiResponse.<Void>builder().success(false).message("邮箱格式不正确").build();
+        }
+        
+        // 验证验证码
+        if (verificationCode == null || verificationCode.trim().isEmpty()) {
+            return ApiResponse.<Void>builder().success(false).message("验证码不能为空").build();
+        }
+        
+        String codeKey = "reset:" + email;
+        if (!verificationCodeService.verifyCode(codeKey, verificationCode)) {
+            return ApiResponse.<Void>builder().success(false).message("验证码错误或已过期").build();
+        }
+        
+        // 验证密码
+        if (newPassword == null || newPassword.trim().isEmpty()) {
+            return ApiResponse.<Void>builder().success(false).message("新密码不能为空").build();
+        }
+        if (newPassword.length() < 6 || newPassword.length() > 15) {
+            return ApiResponse.<Void>builder().success(false).message("密码长度应为6-15位").build();
+        }
+        
+        // 查找用户
+        User user = userMapper.findByEmail(email);
+        if (user == null) {
+            return ApiResponse.<Void>builder().success(false).message("用户不存在").build();
+        }
+        
+        // 更新密码
+        user.setPasswordHash(passwordEncoder.encode(newPassword));
+        userMapper.updateById(user);
+        
+        return ApiResponse.<Void>builder().success(true).message("密码重置成功").build();
     }
 
     @Transactional
     public ApiResponse<AuthResponse> register(RegisterRequest req) {
+        // 验证验证码
+        if (req.getVerificationCode() == null || req.getVerificationCode().trim().isEmpty()) {
+            return ApiResponse.<AuthResponse>builder().success(false).message("请输入验证码").build();
+        }
+        
+        if (!verificationCodeService.verifyCode(req.getEmail(), req.getVerificationCode())) {
+            return ApiResponse.<AuthResponse>builder().success(false).message("验证码错误或已过期").build();
+        }
+        
         // 唯一性校验
         if (userMapper.existsByUsername(req.getUsername())) {
             return ApiResponse.<AuthResponse>builder().success(false).message("用户名已存在").build();

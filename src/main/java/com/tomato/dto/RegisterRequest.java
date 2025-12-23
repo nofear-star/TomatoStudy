@@ -21,5 +21,8 @@ public class RegisterRequest {
     @NotBlank
     @Size(min = 6, max = 128)
     private String password;
+    
+    // 验证码
+    private String verificationCode;
 }
 
