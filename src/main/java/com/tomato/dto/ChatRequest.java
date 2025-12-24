@@ -13,6 +13,11 @@ public class ChatRequest {
      */
     private List<Message> messages;
     
+    /**
+     * 是否扣除番茄（默认true，打开聊天时扣除，发送消息时不扣除）
+     */
+    private Boolean deductTomato = true;
+    
     @Data
     public static class Message {
         /**

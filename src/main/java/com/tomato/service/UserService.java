@@ -495,6 +495,113 @@ public class UserService {
     }
 
     /**
+     * 补签功能
+     * 功能：
+     * 1. 检查补签日期是否在允许范围内（过去7天内）
+     * 2. 检查该日期是否已签到
+     * 3. 检查用户番茄是否足够（需要10个番茄）
+     * 4. 扣除10个番茄
+     * 5. 创建签到记录
+     * 6. 更新本月签到天数
+     */
+    @Transactional
+    public ApiResponse<CurrencyResponse> makeupCheckIn(String token, LocalDate targetDate) {
+        Long userId = getUserIdFromToken(token);
+        if (userId == null) {
+            return ApiResponse.<CurrencyResponse>builder()
+                    .success(false)
+                    .message("无效的 token")
+                    .build();
+        }
+
+        LocalDate today = LocalDate.now();
+
+        // 检查补签日期不能是今天或未来
+        if (targetDate.isAfter(today) || targetDate.isEqual(today)) {
+            return ApiResponse.<CurrencyResponse>builder()
+                    .success(false)
+                    .message("不能补签今天或未来的日期，今天请使用正常签到功能")
+                    .build();
+        }
+
+        // 检查补签日期是否在允许范围内（过去7天内）
+        long daysBetween = ChronoUnit.DAYS.between(targetDate, today);
+        if (daysBetween > 7) {
+            return ApiResponse.<CurrencyResponse>builder()
+                    .success(false)
+                    .message("只能补签过去7天内的日期")
+                    .build();
+        }
+
+        // 检查该日期是否已签到
+        CheckInRecord existingRecord = checkInRecordMapper.findByUserIdAndDate(userId, targetDate);
+        if (existingRecord != null) {
+            return ApiResponse.<CurrencyResponse>builder()
+                    .success(false)
+                    .message("该日期已签到，无需补签")
+                    .build();
+        }
+
+        // 检查用户番茄是否足够（需要10个番茄）
+        User user = userMapper.findByUserId(userId);
+        if (user == null) {
+            return ApiResponse.<CurrencyResponse>builder()
+                    .success(false)
+                    .message("用户不存在")
+                    .build();
+        }
+
+        int currentTomatoes = user.getTomato() != null ? user.getTomato() : 0;
+        int requiredTomatoes = 10;
+        if (currentTomatoes < requiredTomatoes) {
+            return ApiResponse.<CurrencyResponse>builder()
+                    .success(false)
+                    .message(String.format("番茄不足，补签需要 %d 个番茄，当前只有 %d 个", requiredTomatoes, currentTomatoes))
+                    .build();
+        }
+
+        // 扣除10个番茄
+        user.setTomato(currentTomatoes - requiredTomatoes);
+        userMapper.updateById(user);
+
+        // 创建签到记录
+        CheckInRecord checkInRecord = new CheckInRecord();
+        checkInRecord.setUserId(userId);
+        checkInRecord.setCheckinDate(targetDate);
+        checkInRecord.setCreatedAt(LocalDateTime.now());
+        checkInRecordMapper.insert(checkInRecord);
+
+        // 获取或创建用户货币记录
+        UserCurrency currency = userCurrencyMapper.findByUserId(userId);
+        if (currency == null) {
+            currency = new UserCurrency();
+            currency.setUserId(userId);
+            currency.setCoins(0);
+            currency.setCheckDay(0);
+            currency.setUpdatedAt(LocalDateTime.now());
+            userCurrencyMapper.insert(currency);
+        }
+
+        // 更新本月签到天数
+        int targetYear = targetDate.getYear();
+        int targetMonth = targetDate.getMonthValue();
+        Integer checkInDays = checkInRecordMapper.countCheckInDaysByMonth(userId, targetYear, targetMonth);
+        currency.setCheckDay(checkInDays != null ? checkInDays : 1);
+        currency.setUpdatedAt(LocalDateTime.now());
+        userCurrencyMapper.updateById(currency);
+
+        // 返回更新后的货币信息
+        UserCurrency updatedCurrency = userCurrencyMapper.findByUserId(userId);
+        CurrencyResponse currencyResponse = convertToCurrencyResponse(updatedCurrency, userId);
+
+        return ApiResponse.<CurrencyResponse>builder()
+                .success(true)
+                .message(String.format("补签成功！已补签 %s，消耗 %d 个番茄", targetDate, requiredTomatoes))
+                .data(currencyResponse)
+                .build();
+    }
+
+    /**
      * 获取指定用户信息（根据隐私设置过滤）
      */
     public ApiResponse<PublicUserResponse> getUserByUsername(String token, String username) {

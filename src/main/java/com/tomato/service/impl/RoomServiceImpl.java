@@ -139,7 +139,8 @@ public class RoomServiceImpl extends ServiceImpl<RoomMapper, Room> implements Ro
             if (isActiveStatus(existMember.getStatus())) {
                 throw new IllegalArgumentException("您已在此自习室中");
             }
-            existMember.setStatus(MEMBER_STATUS_FOCUS);
+            // 重新加入时，状态设置为休息中
+            existMember.setStatus(MEMBER_STATUS_REST);
             existMember.setRole(MEMBER_ROLE_MEMBER);
             roomMemberMapper.updateById(existMember);
             return;
@@ -149,7 +150,7 @@ public class RoomServiceImpl extends ServiceImpl<RoomMapper, Room> implements Ro
         member.setRoomId(roomId);
         member.setUserId(userId);
         member.setRole(MEMBER_ROLE_MEMBER);
-        member.setStatus(MEMBER_STATUS_FOCUS);
+        member.setStatus(MEMBER_STATUS_REST); // 新成员加入时默认状态为休息中
         member.setSessionFocusDuration(0);
         roomMemberMapper.insert(member);
     }
@@ -293,21 +294,39 @@ public class RoomServiceImpl extends ServiceImpl<RoomMapper, Room> implements Ro
         }
 
         String normalized;
+        String userStatus;
         switch (status.toLowerCase()) {
             case "focusing":
             case "focus":
             case "专注中":
             case "专注":
-                normalized = MEMBER_STATUS_FOCUS; break;
+                normalized = MEMBER_STATUS_FOCUS;
+                userStatus = "专注中";
+                break;
             case "resting":
             case "rest":
             case "休息中":
             case "休息":
             default:
                 normalized = MEMBER_STATUS_REST;
+                userStatus = "在线";
+                break;
         }
+        
+        // 更新房间成员状态
         member.setStatus(normalized);
         roomMemberMapper.updateById(member);
+        
+        // 同时更新用户表中的状态
+        User user = userMapper.findByUserId(userId);
+        if (user != null) {
+            System.out.println("🔄 更新用户状态 - userId: " + userId + ", 旧状态: " + user.getStatus() + ", 新状态: " + userStatus);
+            user.setStatus(userStatus);
+            userMapper.updateById(user);
+            System.out.println("✅ 用户状态已更新为: " + userStatus);
+        } else {
+            System.out.println("⚠️ 用户不存在，无法更新状态 - userId: " + userId);
+        }
     }
 }
 

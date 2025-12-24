@@ -195,7 +195,7 @@ public class AuthService {
         }
         user.setPasswordHash(passwordEncoder.encode(req.getPassword()));
         user.setStatus("离线"); // 注册时默认为离线状态
-        user.setTomato(0);
+        user.setTomato(50); // 注册时赠送50个番茄
         user.setDeleted(0); // 新注册的用户未删除
 
         userMapper.insert(user);
