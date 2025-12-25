@@ -6,6 +6,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.bind.MissingPathVariableException;
 import org.springframework.web.servlet.NoHandlerFoundException;
 
@@ -56,6 +57,17 @@ public class GlobalExceptionHandler {
                 ApiResponse.<Void>builder()
                         .success(false)
                         .message("请求体格式错误: " + (message != null ? message : "无法解析 JSON"))
+                        .build()
+        );
+    }
+    
+    @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+    public ResponseEntity<ApiResponse<Void>> handleHttpMediaTypeNotSupported(HttpMediaTypeNotSupportedException ex) {
+        String contentType = ex.getContentType() != null ? ex.getContentType().toString() : "未知";
+        return ResponseEntity.status(415).body(
+                ApiResponse.<Void>builder()
+                        .success(false)
+                        .message("不支持的 Content-Type: " + contentType + "，请使用 application/json")
                         .build()
         );
     }
