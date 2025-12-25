@@ -5,6 +5,7 @@ import com.tomato.dto.*;
 import com.tomato.entity.*;
 import com.tomato.mapper.*;
 import com.tomato.security.JwtUtil;
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -33,6 +34,8 @@ public class UserService {
     private final FriendRequestMapper friendRequestMapper;
     private final FriendMapper friendMapper;
     private final CheckInRecordMapper checkInRecordMapper;
+    private final FocusSessionMapper focusSessionMapper;
+    private final RoomMemberMapper roomMemberMapper;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
     private final ObjectMapper objectMapper;
@@ -46,6 +49,8 @@ public class UserService {
                        FriendRequestMapper friendRequestMapper,
                        FriendMapper friendMapper,
                        CheckInRecordMapper checkInRecordMapper,
+                       FocusSessionMapper focusSessionMapper,
+                       RoomMemberMapper roomMemberMapper,
                        PasswordEncoder passwordEncoder, 
                        JwtUtil jwtUtil,
                        ObjectMapper objectMapper,
@@ -58,6 +63,8 @@ public class UserService {
         this.friendRequestMapper = friendRequestMapper;
         this.friendMapper = friendMapper;
         this.checkInRecordMapper = checkInRecordMapper;
+        this.focusSessionMapper = focusSessionMapper;
+        this.roomMemberMapper = roomMemberMapper;
         this.passwordEncoder = passwordEncoder;
         this.jwtUtil = jwtUtil;
         this.objectMapper = objectMapper;
@@ -488,6 +495,113 @@ public class UserService {
     }
 
     /**
+     * 补签功能
+     * 功能：
+     * 1. 检查补签日期是否在允许范围内（过去7天内）
+     * 2. 检查该日期是否已签到
+     * 3. 检查用户番茄是否足够（需要10个番茄）
+     * 4. 扣除10个番茄
+     * 5. 创建签到记录
+     * 6. 更新本月签到天数
+     */
+    @Transactional
+    public ApiResponse<CurrencyResponse> makeupCheckIn(String token, LocalDate targetDate) {
+        Long userId = getUserIdFromToken(token);
+        if (userId == null) {
+            return ApiResponse.<CurrencyResponse>builder()
+                    .success(false)
+                    .message("无效的 token")
+                    .build();
+        }
+
+        LocalDate today = LocalDate.now();
+
+        // 检查补签日期不能是今天或未来
+        if (targetDate.isAfter(today) || targetDate.isEqual(today)) {
+            return ApiResponse.<CurrencyResponse>builder()
+                    .success(false)
+                    .message("不能补签今天或未来的日期，今天请使用正常签到功能")
+                    .build();
+        }
+
+        // 检查补签日期是否在允许范围内（过去7天内）
+        long daysBetween = ChronoUnit.DAYS.between(targetDate, today);
+        if (daysBetween > 7) {
+            return ApiResponse.<CurrencyResponse>builder()
+                    .success(false)
+                    .message("只能补签过去7天内的日期")
+                    .build();
+        }
+
+        // 检查该日期是否已签到
+        CheckInRecord existingRecord = checkInRecordMapper.findByUserIdAndDate(userId, targetDate);
+        if (existingRecord != null) {
+            return ApiResponse.<CurrencyResponse>builder()
+                    .success(false)
+                    .message("该日期已签到，无需补签")
+                    .build();
+        }
+
+        // 检查用户番茄是否足够（需要10个番茄）
+        User user = userMapper.findByUserId(userId);
+        if (user == null) {
+            return ApiResponse.<CurrencyResponse>builder()
+                    .success(false)
+                    .message("用户不存在")
+                    .build();
+        }
+
+        int currentTomatoes = user.getTomato() != null ? user.getTomato() : 0;
+        int requiredTomatoes = 10;
+        if (currentTomatoes < requiredTomatoes) {
+            return ApiResponse.<CurrencyResponse>builder()
+                    .success(false)
+                    .message(String.format("番茄不足，补签需要 %d 个番茄，当前只有 %d 个", requiredTomatoes, currentTomatoes))
+                    .build();
+        }
+
+        // 扣除10个番茄
+        user.setTomato(currentTomatoes - requiredTomatoes);
+        userMapper.updateById(user);
+
+        // 创建签到记录
+        CheckInRecord checkInRecord = new CheckInRecord();
+        checkInRecord.setUserId(userId);
+        checkInRecord.setCheckinDate(targetDate);
+        checkInRecord.setCreatedAt(LocalDateTime.now());
+        checkInRecordMapper.insert(checkInRecord);
+
+        // 获取或创建用户货币记录
+        UserCurrency currency = userCurrencyMapper.findByUserId(userId);
+        if (currency == null) {
+            currency = new UserCurrency();
+            currency.setUserId(userId);
+            currency.setCoins(0);
+            currency.setCheckDay(0);
+            currency.setUpdatedAt(LocalDateTime.now());
+            userCurrencyMapper.insert(currency);
+        }
+
+        // 更新本月签到天数
+        int targetYear = targetDate.getYear();
+        int targetMonth = targetDate.getMonthValue();
+        Integer checkInDays = checkInRecordMapper.countCheckInDaysByMonth(userId, targetYear, targetMonth);
+        currency.setCheckDay(checkInDays != null ? checkInDays : 1);
+        currency.setUpdatedAt(LocalDateTime.now());
+        userCurrencyMapper.updateById(currency);
+
+        // 返回更新后的货币信息
+        UserCurrency updatedCurrency = userCurrencyMapper.findByUserId(userId);
+        CurrencyResponse currencyResponse = convertToCurrencyResponse(updatedCurrency, userId);
+
+        return ApiResponse.<CurrencyResponse>builder()
+                .success(true)
+                .message(String.format("补签成功！已补签 %s，消耗 %d 个番茄", targetDate, requiredTomatoes))
+                .data(currencyResponse)
+                .build();
+    }
+
+    /**
      * 获取指定用户信息（根据隐私设置过滤）
      */
     public ApiResponse<PublicUserResponse> getUserByUsername(String token, String username) {
@@ -569,15 +683,37 @@ public class UserService {
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
         String startTimeStr = startTime.format(formatter);
 
-        // 更新任务状态为"进行中"并设置开始时间
-        task.setStatus("进行中");
-        task.setStartTime(startTime);
-        task.setUpdatedAt(startTime);
-        taskMapper.updateById(task);
+        // 更新任务状态为"进行中"并设置开始时间（不更新updated_at）
+        // 使用UpdateWrapper只更新status和start_time字段，确保不更新updated_at
+        UpdateWrapper<Task> updateWrapper = new UpdateWrapper<>();
+        updateWrapper.eq("id", task.getId())
+                .set("status", "进行中")
+                .set("start_time", startTime);
+        taskMapper.update(null, updateWrapper);
 
         // 更新用户状态为"专注中"
         user.setStatus("专注中");
         userMapper.updateById(user);
+
+        // 获取用户的房间ID（如果用户在房间中）
+        Long roomId = null;
+        RoomMember roomMember = roomMemberMapper.findByUserId(userId);
+        if (roomMember != null) {
+            roomId = roomMember.getRoomId();
+        }
+
+        // 创建专注会话记录
+        FocusSession focusSession = new FocusSession();
+        focusSession.setUserId(userId);
+        // room_id 允许为 NULL（用户可能不在房间中专注）
+        focusSession.setRoomId(roomId); // 如果不在房间中，设置为 null
+        focusSession.setTaskId(task.getId());
+        focusSession.setSessionType("专注学习");
+        focusSession.setDuration(task.getDuration() != null ? task.getDuration() : 25); // 默认25分钟
+        focusSession.setStartTime(startTime);
+        focusSession.setStatus("进行中");
+        focusSession.setCreatedAt(startTime);
+        focusSessionMapper.insert(focusSession);
 
         // 构建响应
         FocusResponse focusResponse = FocusResponse.builder()
@@ -655,6 +791,23 @@ public class UserService {
         // 更新用户状态为"在线"
         user.setStatus("在线");
         userMapper.updateById(user);
+
+        // 更新专注会话记录
+        // 查找最新的"进行中"状态的专注会话
+        FocusSession focusSession = focusSessionMapper.findLatestByUserIdAndStatus(userId, "进行中");
+        if (focusSession != null) {
+            // 如果任务ID匹配，或者任务ID为空（可能是旧数据），都更新
+            if (focusSession.getTaskId() == null || focusSession.getTaskId().equals(task.getId())) {
+                focusSession.setEndTime(endTime);
+                focusSession.setStatus("已完成");
+                focusSessionMapper.updateById(focusSession);
+            } else {
+                // 如果任务ID不匹配，仍然更新（可能是任务被切换了）
+                focusSession.setEndTime(endTime);
+                focusSession.setStatus("已完成");
+                focusSessionMapper.updateById(focusSession);
+            }
+        }
 
         // 构建响应
         StopFocusResponse stopFocusResponse = StopFocusResponse.builder()
@@ -956,6 +1109,7 @@ public class UserService {
 
         // 更新任务字段（只更新提供的字段）
         boolean hasUpdate = false;
+        String newStatus = null;
         if (req.getTask_name() != null && !req.getTask_name().trim().isEmpty()) {
             task.setTaskName(req.getTask_name().trim());
             hasUpdate = true;
@@ -969,7 +1123,8 @@ public class UserService {
             hasUpdate = true;
         }
         if (req.getStatus() != null && !req.getStatus().trim().isEmpty()) {
-            task.setStatus(req.getStatus().trim());
+            newStatus = req.getStatus().trim();
+            task.setStatus(newStatus);
             hasUpdate = true;
         }
 
@@ -993,6 +1148,21 @@ public class UserService {
         // 更新 updated_at
         LocalDateTime now = LocalDateTime.now();
         task.setUpdatedAt(now);
+
+        // 根据状态变化，自动设置开始时间或结束时间
+        // 如果状态变为"进行中"，设置开始时间
+        if ("进行中".equals(newStatus) && task.getStartTime() == null) {
+            task.setStartTime(now);
+        }
+        // 如果状态变为"已完成"，设置结束时间
+        if ("已完成".equals(newStatus) && task.getEndTime() == null) {
+            task.setEndTime(now);
+            // 如果开始时间存在，计算实际专注时长
+            if (task.getStartTime() != null) {
+                long minutes = java.time.Duration.between(task.getStartTime(), now).toMinutes();
+                task.setActualDuration((int) minutes);
+            }
+        }
 
         // 保存更新
         taskMapper.updateById(task);
@@ -1059,15 +1229,27 @@ public class UserService {
                     .build();
         }
 
-        // 检查是否已经发送过好友申请（待处理状态）
-        if (friendRequestMapper.existsByFromUserIdAndToUserId(fromUserId, toUserId)) {
-            FriendRequest existingRequest = friendRequestMapper.findByFromUserIdAndToUserId(fromUserId, toUserId);
-            if (existingRequest != null && "待处理".equals(existingRequest.getStatus())) {
-                return ApiResponse.<Void>builder()
-                        .success(false)
-                        .message("已经发送过好友申请，请等待对方处理")
-                        .build();
-            }
+        // 检查是否已经是好友
+        if (friendMapper.existsByUserIdAndFriendId(fromUserId, toUserId) || 
+            friendMapper.existsByUserIdAndFriendId(toUserId, fromUserId)) {
+            return ApiResponse.<Void>builder()
+                    .success(false)
+                    .message("该用户已经是您的好友")
+                    .build();
+        }
+
+        // 检查是否已经发送过好友申请（只检查待处理状态）
+        FriendRequest existingRequest = friendRequestMapper.findByFromUserIdAndToUserId(fromUserId, toUserId);
+        if (existingRequest != null && "待处理".equals(existingRequest.getStatus())) {
+            return ApiResponse.<Void>builder()
+                    .success(false)
+                    .message("已经发送过好友申请，请等待对方处理")
+                    .build();
+        }
+        
+        // 如果存在已处理或已拒绝的好友请求记录，删除它以便重新发送
+        if (existingRequest != null && !"待处理".equals(existingRequest.getStatus())) {
+            friendRequestMapper.deleteById(existingRequest.getId());
         }
 
         // 创建好友申请
@@ -1370,6 +1552,17 @@ public class UserService {
         }
         if (friend2 != null) {
             friendMapper.deleteById(friend2.getId());
+        }
+
+        // 清理相关的好友请求记录，允许重新添加
+        // 删除两个方向的好友请求记录（无论状态如何）
+        FriendRequest request1 = friendRequestMapper.findByFromUserIdAndToUserId(userId, friendId);
+        if (request1 != null) {
+            friendRequestMapper.deleteById(request1.getId());
+        }
+        FriendRequest request2 = friendRequestMapper.findByFromUserIdAndToUserId(friendId, userId);
+        if (request2 != null) {
+            friendRequestMapper.deleteById(request2.getId());
         }
 
         return ApiResponse.<Void>builder()

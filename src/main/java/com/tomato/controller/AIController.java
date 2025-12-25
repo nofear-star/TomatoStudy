@@ -42,8 +42,11 @@ public class AIController {
                 );
             }
             
-            // 调用AI服务
-            ChatResponse response = aiService.chat(request);
+            // 提取token
+            String token = extractToken(httpRequest);
+            
+            // 调用AI服务（传入token以便扣除番茄）
+            ChatResponse response = aiService.chat(request, token);
             
             return ResponseEntity.ok(
                     ApiResponse.<ChatResponse>builder()
@@ -60,6 +63,14 @@ public class AIController {
                             .build()
             );
         }
+    }
+    
+    private String extractToken(HttpServletRequest request) {
+        String header = request.getHeader("Authorization");
+        if (header != null && header.startsWith("Bearer ")) {
+            return header.substring(7);
+        }
+        return null;
     }
 }
 

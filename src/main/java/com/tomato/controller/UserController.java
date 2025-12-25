@@ -10,6 +10,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 @RestController
@@ -239,6 +241,50 @@ public class UserController {
         
         if (resp.isSuccess()) {
             // 直接返回数据对象，符合用户要求的格式
+            return ResponseEntity.ok(resp.getData());
+        } else {
+            return ResponseEntity.status(400).body(
+                    ApiResponse.<CurrencyResponse>builder()
+                            .success(false)
+                            .message(resp.getMessage())
+                            .build()
+            );
+        }
+    }
+
+    /**
+     * 补签功能
+     */
+    @PostMapping(value = "/me/checkin/makeup", produces = "application/json")
+    public ResponseEntity<?> makeupCheckIn(
+            @RequestParam("date") String dateStr,
+            HttpServletRequest request) {
+        String token = extractToken(request);
+        if (token == null) {
+            return ResponseEntity.badRequest().body(
+                    ApiResponse.<CurrencyResponse>builder()
+                            .success(false)
+                            .message("缺少 Authorization 头，格式应为: Bearer <token>")
+                            .build()
+            );
+        }
+
+        // 解析日期字符串
+        LocalDate targetDate;
+        try {
+            targetDate = LocalDate.parse(dateStr, DateTimeFormatter.ISO_DATE);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(
+                    ApiResponse.<CurrencyResponse>builder()
+                            .success(false)
+                            .message("日期格式错误，请使用 YYYY-MM-DD 格式")
+                            .build()
+            );
+        }
+
+        ApiResponse<CurrencyResponse> resp = userService.makeupCheckIn(token, targetDate);
+        
+        if (resp.isSuccess()) {
             return ResponseEntity.ok(resp.getData());
         } else {
             return ResponseEntity.status(400).body(

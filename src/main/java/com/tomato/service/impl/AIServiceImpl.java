@@ -4,6 +4,9 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tomato.dto.ChatRequest;
 import com.tomato.dto.ChatResponse;
+import com.tomato.entity.User;
+import com.tomato.mapper.UserMapper;
+import com.tomato.security.JwtUtil;
 import com.tomato.service.AIService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
@@ -11,6 +14,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.List;
@@ -31,14 +35,51 @@ public class AIServiceImpl implements AIService {
     
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
+    private final UserMapper userMapper;
+    private final JwtUtil jwtUtil;
     
-    public AIServiceImpl() {
+    public AIServiceImpl(UserMapper userMapper, JwtUtil jwtUtil) {
         this.restTemplate = new RestTemplate();
         this.objectMapper = new ObjectMapper();
+        this.userMapper = userMapper;
+        this.jwtUtil = jwtUtil;
     }
     
     @Override
-    public ChatResponse chat(ChatRequest request) {
+    @Transactional
+    public ChatResponse chat(ChatRequest request, String token) {
+        // 只有在需要扣除番茄时才扣除（打开聊天时扣除，发送消息时不扣除）
+        Boolean shouldDeduct = request.getDeductTomato();
+        if (shouldDeduct == null) {
+            shouldDeduct = true; // 默认扣除，保持向后兼容
+        }
+        
+        if (shouldDeduct && token != null && !token.isEmpty()) {
+            try {
+                Long userId = jwtUtil.getUserIdFromToken(token);
+                if (userId != null) {
+                    User user = userMapper.findByUserId(userId);
+                    if (user != null) {
+                        int currentTomatoes = user.getTomato() != null ? user.getTomato() : 0;
+                        if (currentTomatoes > 0) {
+                            user.setTomato(currentTomatoes - 1);
+                            userMapper.updateById(user);
+                        } else {
+                            // 番茄不足，返回错误
+                            ChatResponse errorResponse = new ChatResponse();
+                            errorResponse.setContent("番茄不足，无法使用聊天功能。请先完成任务或签到获得番茄！");
+                            throw new RuntimeException("番茄不足");
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                // 如果扣除失败，抛出异常
+                if (e.getMessage() != null && e.getMessage().contains("番茄不足")) {
+                    throw e;
+                }
+                // 其他错误（如token无效）继续执行，但不扣除番茄
+            }
+        }
         System.out.println("=== AI服务调用开始 ===");
         System.out.println("API Key原始值: " + (tongyiApiKey != null ? "[" + tongyiApiKey + "]" : "null"));
         System.out.println("API Key长度: " + (tongyiApiKey != null ? tongyiApiKey.length() : 0));

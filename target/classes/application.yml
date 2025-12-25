@@ -6,6 +6,24 @@ server:
 spring:
   application:
     name: tomato-backend
+  # 邮件服务器配置
+  mail:
+    host: smtp.qq.com
+    port: 587
+    username: 1248259684@qq.com
+    password: eagayahafuchfhbb
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+            required: true
+          connectiontimeout: 5000
+          timeout: 5000
+          writetimeout: 5000
+  
+
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
     url: jdbc:mysql://localhost:3306/tomato_study_room?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
@@ -34,19 +52,22 @@ mybatis-plus:
 # JWT配置
 jwt:
   secret: replace-with-a-long-random-secret-key-1234567890abcd
-  expiration-ms: 3600000
+  expiration-ms: 21600000
 
 logging:
   level:
-    com.tomato: debug
+    com.tomato: info
     org.springframework.web: info
+    root: info
 
 # 文件上传配置
 
 # 文件存储配置
+# 统一使用TomatoStudy目录下的uploads文件夹
+# 这样上传代码时只需要上传TomatoStudy文件夹即可包含所有文件
 file:
   upload:
-    path: ./uploads/avatars
+    path: ./uploads/avatars  # 相对于TomatoStudy目录
     url-prefix: /api/uploads/avatars
 
 # 通义千问API配置

@@ -138,9 +138,12 @@ public class RoomController {
     @PutMapping("/{roomId}/status")
     public ResponseEntity<ApiResponse<Void>> updateMemberStatus(@PathVariable Long roomId,
                                                                 @RequestBody Map<String, Object> payload) {
+        System.out.println("📥 收到更新用户状态请求 - roomId: " + roomId + ", payload: " + payload);
         Long userId = payload.get("userId") != null ? Long.valueOf(payload.get("userId").toString()) : null;
         String status = payload.get("status") != null ? payload.get("status").toString() : null;
+        System.out.println("📥 解析后的参数 - userId: " + userId + ", status: " + status);
         roomService.updateMemberStatus(roomId, userId, status);
+        System.out.println("✅ 用户状态更新完成");
         return ResponseEntity.ok(ApiResponse.success("状态更新成功", null));
     }
 }

@@ -5,7 +5,9 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.tomato.dto.TaskCreateDTO;
 import com.tomato.dto.TaskUpdateDTO;
 import com.tomato.entity.Task;
+import com.tomato.entity.User;
 import com.tomato.mapper.TaskMapper;
+import com.tomato.mapper.UserMapper;
 import com.tomato.service.TaskService;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
@@ -20,6 +22,12 @@ import java.util.concurrent.ThreadLocalRandom;
  */
 @Service
 public class TaskServiceImpl extends ServiceImpl<TaskMapper, Task> implements TaskService {
+    
+    private final UserMapper userMapper;
+    
+    public TaskServiceImpl(UserMapper userMapper) {
+        this.userMapper = userMapper;
+    }
 
     @Override
     public List<Task> getTasksByUserId(Long userId) {
@@ -52,6 +60,11 @@ public class TaskServiceImpl extends ServiceImpl<TaskMapper, Task> implements Ta
             throw new IllegalArgumentException("无权限修改此任务");
         }
 
+        // 检查任务状态是否从未完成变为已完成
+        boolean wasCompleted = "已完成".equals(task.getStatus());
+        boolean willBeCompleted = dto.getStatus() != null && "已完成".equals(dto.getStatus());
+        boolean justCompleted = !wasCompleted && willBeCompleted;
+
         if (dto.getTaskName() != null) task.setTaskName(dto.getTaskName());
         if (dto.getTaskNote() != null) task.setTaskNote(dto.getTaskNote());
         if (dto.getDuration() != null) task.setDuration(dto.getDuration());
@@ -59,6 +72,17 @@ public class TaskServiceImpl extends ServiceImpl<TaskMapper, Task> implements Ta
         task.setUpdatedAt(LocalDateTime.now());
 
         updateById(task);
+        
+        // 如果任务刚刚完成，给用户增加1个番茄
+        if (justCompleted) {
+            User user = userMapper.findByUserId(task.getUserId());
+            if (user != null) {
+                int currentTomatoes = user.getTomato() != null ? user.getTomato() : 0;
+                user.setTomato(currentTomatoes + 1);
+                userMapper.updateById(user);
+            }
+        }
+        
         return task;
     }
 
