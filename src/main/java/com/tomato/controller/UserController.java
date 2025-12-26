@@ -571,6 +571,32 @@ public class UserController {
     }
 
     /**
+     * 更新用户状态为离线（用于页面关闭时调用）
+     * 路径与获取当前用户信息保持一致的前缀：/user/me/offline
+     */
+    @PostMapping("/user/me/offline")
+    public ResponseEntity<ApiResponse<Void>> setUserOffline(HttpServletRequest request) {
+        String token = extractToken(request);
+        if (token == null) {
+            // 对于离线状态更新，即使没有token也返回成功，避免阻塞页面关闭
+            return ResponseEntity.ok(ApiResponse.success("状态已更新", null));
+        }
+
+        ApiResponse<Void> resp = userService.setUserOffline(token);
+        return ResponseEntity.status(resp.isSuccess() ? 200 : 400).body(resp);
+    }
+
+    /**
+     * 直接根据 userId 更新用户状态为离线
+     * 用于前端在每个窗口中携带自己的 userId 时精确更新
+     */
+    @PostMapping("/users/{userId}/offline")
+    public ResponseEntity<ApiResponse<Void>> setUserOfflineByUserId(@PathVariable Long userId) {
+        ApiResponse<Void> resp = userService.setUserOfflineByUserId(userId);
+        return ResponseEntity.status(resp.isSuccess() ? 200 : 400).body(resp);
+    }
+
+    /**
      * 从请求头中提取 token
      */
     private String extractToken(HttpServletRequest request) {

@@ -115,6 +115,45 @@ public class UserService {
     }
 
     /**
+     * 设置用户状态为离线（用于页面关闭时调用）
+     */
+    @Transactional
+    public ApiResponse<Void> setUserOffline(String token) {
+        Long userId = getUserIdFromToken(token);
+        return setUserOfflineByUserId(userId);
+    }
+
+    /**
+     * 根据 userId 将用户状态设置为离线
+     * 这样即使多窗口/多 token，也可以精确更新指定用户
+     */
+    @Transactional
+    public ApiResponse<Void> setUserOfflineByUserId(Long userId) {
+        if (userId == null) {
+            return ApiResponse.<Void>builder()
+                    .success(false)
+                    .message("无效的用户ID")
+                    .build();
+        }
+
+        User user = userMapper.findByUserId(userId);
+        if (user == null) {
+            return ApiResponse.<Void>builder()
+                    .success(false)
+                    .message("用户不存在")
+                    .build();
+        }
+
+        user.setStatus("离线");
+        userMapper.updateById(user);
+
+        return ApiResponse.<Void>builder()
+                .success(true)
+                .message("状态已更新为离线")
+                .build();
+    }
+
+    /**
      * 更新当前用户信息
      */
     @Transactional
@@ -1478,10 +1517,13 @@ public class UserService {
             // 获取好友信息
             User friendUser = userMapper.findByUserId(friend.getFriendId());
             if (friendUser != null) {
+                // 始终使用用户当前的 status 字段，而不是 friend 表中缓存的 friend_status
+                String currentStatus = friendUser.getStatus() != null ? friendUser.getStatus() : "离线";
+
                 FriendResponse response = FriendResponse.builder()
                         .friend_id(friend.getFriendId())
                         .friend_username(friendUser.getUsername())
-                        .friend_status(friend.getFriendStatus())
+                        .friend_status(currentStatus)
                         .build();
 
                 responseList.add(response);

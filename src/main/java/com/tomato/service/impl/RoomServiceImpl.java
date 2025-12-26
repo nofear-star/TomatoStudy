@@ -4,9 +4,11 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.tomato.dto.RoomCreateDTO;
 import com.tomato.dto.RoomUpdateDTO;
+import com.tomato.entity.BackgroundMusic;
 import com.tomato.entity.Room;
 import com.tomato.entity.RoomMember;
 import com.tomato.entity.User;
+import com.tomato.mapper.BackgroundMusicMapper;
 import com.tomato.mapper.RoomMapper;
 import com.tomato.mapper.RoomMemberMapper;
 import com.tomato.mapper.UserMapper;
@@ -36,6 +38,9 @@ public class RoomServiceImpl extends ServiceImpl<RoomMapper, Room> implements Ro
 
     @Autowired
     private UserMapper userMapper;
+
+    @Autowired
+    private BackgroundMusicMapper backgroundMusicMapper;
 
     @Override
     public List<Room> getRoomList() {
@@ -73,6 +78,16 @@ public class RoomServiceImpl extends ServiceImpl<RoomMapper, Room> implements Ro
         if (dto.getEndTime() != null) {
             room.setEndTime(dto.getEndTime());
         }
+        // 处理背景音乐：根据musicName查询并设置musicId
+        if (dto.getMusicName() != null && !dto.getMusicName().trim().isEmpty() && !"无".equals(dto.getMusicName())) {
+            Long musicId = findMusicIdByName(dto.getMusicName());
+            room.setMusicId(musicId);
+            room.setMusicName(dto.getMusicName());
+        } else {
+            // 如果没有背景音乐或选择"无"，设置为null
+            room.setMusicId(null);
+            room.setMusicName(null);
+        }
         room.setCreatedAt(LocalDateTime.now());
         room.setUpdatedAt(LocalDateTime.now());
         save(room);
@@ -98,7 +113,18 @@ public class RoomServiceImpl extends ServiceImpl<RoomMapper, Room> implements Ro
         if (dto.getEndTime() != null) {
             room.setEndTime(dto.getEndTime());
         }
-        if (dto.getMusicName() != null) room.setMusicName(dto.getMusicName());
+        // 处理背景音乐：根据musicName查询并设置musicId
+        if (dto.getMusicName() != null) {
+            if (dto.getMusicName().trim().isEmpty() || "无".equals(dto.getMusicName())) {
+                // 如果设置为空或"无"，清除背景音乐
+                room.setMusicId(null);
+                room.setMusicName(null);
+            } else {
+                Long musicId = findMusicIdByName(dto.getMusicName());
+                room.setMusicId(musicId);
+                room.setMusicName(dto.getMusicName());
+            }
+        }
         room.setUpdatedAt(LocalDateTime.now());
 
         updateById(room);
@@ -180,6 +206,23 @@ public class RoomServiceImpl extends ServiceImpl<RoomMapper, Room> implements Ro
 
         // 真正删除成员记录，从房间成员列表中移除
         roomMemberMapper.deleteById(member.getId());
+    }
+
+    @Override
+    @Transactional
+    public void leaveAllRooms(Long userId) {
+        // 查找用户所在的所有房间
+        List<RoomMember> members = roomMemberMapper.findAllByUserId(userId);
+        if (members == null || members.isEmpty()) {
+            return; // 用户不在任何房间中
+        }
+
+        // 移除用户从所有房间中（房主除外，房主需要手动解散房间）
+        for (RoomMember member : members) {
+            if (!MEMBER_ROLE_HOST.equals(member.getRole())) {
+                roomMemberMapper.deleteById(member.getId());
+            }
+        }
     }
 
     @Override
@@ -279,13 +322,29 @@ public class RoomServiceImpl extends ServiceImpl<RoomMapper, Room> implements Ro
         return MEMBER_STATUS_FOCUS.equals(status) || "active".equalsIgnoreCase(status);
     }
 
+    /**
+     * 根据音乐名称查找音乐ID
+     * @param musicName 音乐名称
+     * @return 音乐ID，如果未找到则返回null
+     */
+    private Long findMusicIdByName(String musicName) {
+        if (musicName == null || musicName.trim().isEmpty()) {
+            return null;
+        }
+        LambdaQueryWrapper<BackgroundMusic> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(BackgroundMusic::getMusicName, musicName.trim());
+        BackgroundMusic music = backgroundMusicMapper.selectOne(wrapper);
+        return music != null ? music.getId() : null;
+    }
+
     @Override
     @Transactional
     public void updateMemberStatus(Long roomId, Long userId, String status) {
         if (roomId == null || userId == null || status == null) {
             throw new IllegalArgumentException("roomId、userId、status 不能为空");
         }
-        Room room = findRoomByBusinessId(roomId); // 校验房间存在
+        // 校验房间存在
+        findRoomByBusinessId(roomId);
         LambdaQueryWrapper<RoomMember> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(RoomMember::getRoomId, roomId).eq(RoomMember::getUserId, userId);
         RoomMember member = roomMemberMapper.selectOne(wrapper);

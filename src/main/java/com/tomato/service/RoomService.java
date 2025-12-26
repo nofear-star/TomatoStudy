@@ -21,6 +21,7 @@ public interface RoomService extends IService<Room> {
     void joinRoom(Long roomId, Long userId);
     void joinRoomByCode(String joinCode, Long userId);
     void leaveRoom(Long roomId, Long userId);
+    void leaveAllRooms(Long userId);
     List<Map<String, Object>> getRoomMembers(Long roomId);
     void kickMember(Long roomId, Long userId, Long targetUserId);
     void updateMemberStatus(Long roomId, Long userId, String status);

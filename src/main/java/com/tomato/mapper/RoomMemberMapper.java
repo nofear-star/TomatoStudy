@@ -19,5 +19,11 @@ public interface RoomMemberMapper extends BaseMapper<RoomMember> {
      */
     @Select("SELECT * FROM roommember WHERE user_id = #{userId} LIMIT 1")
     RoomMember findByUserId(@Param("userId") Long userId);
+    
+    /**
+     * 根据用户ID查找用户所在的所有房间成员记录
+     */
+    @Select("SELECT * FROM roommember WHERE user_id = #{userId}")
+    List<RoomMember> findAllByUserId(@Param("userId") Long userId);
 }
 
