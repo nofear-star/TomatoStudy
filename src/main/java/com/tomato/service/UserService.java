@@ -87,7 +87,10 @@ public class UserService {
 
     /**
      * 获取当前用户信息
+     * 如果用户状态是"离线"，自动更新为"在线"（因为用户正在调用API，说明用户在线）
+     * 如果用户状态是"专注中"或"在线"，保持不变
      */
+    @Transactional
     public ApiResponse<UserResponse> getCurrentUser(String token) {
         Long userId = getUserIdFromToken(token);
         if (userId == null) {
@@ -103,6 +106,14 @@ public class UserService {
                     .success(false)
                     .message("用户不存在")
                     .build();
+        }
+
+        // 如果用户状态是"离线"，自动更新为"在线"（因为用户正在调用API，说明用户在线）
+        // 如果用户状态是"专注中"或"在线"，保持不变
+        String currentStatus = user.getStatus();
+        if (currentStatus == null || "离线".equals(currentStatus)) {
+            user.setStatus("在线");
+            userMapper.updateById(user);
         }
 
         UserResponse userResponse = convertToUserResponse(user);
