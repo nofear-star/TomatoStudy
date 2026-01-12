@@ -12,7 +12,9 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 public class UserController {
@@ -114,13 +116,13 @@ public class UserController {
         
         // 转换为用户要求的格式：code/message/data
         if (resp.isSuccess()) {
-            java.util.Map<String, Object> response = new java.util.HashMap<>();
+            Map<String, Object> response = new HashMap<>();
             response.put("code", 200);
             response.put("message", resp.getMessage());
             response.put("data", resp.getData());
             return ResponseEntity.ok(response);
         } else {
-            java.util.Map<String, Object> response = new java.util.HashMap<>();
+            Map<String, Object> response = new HashMap<>();
             response.put("code", 400);
             response.put("message", resp.getMessage());
             response.put("data", null);
@@ -149,13 +151,13 @@ public class UserController {
         
         // 转换为用户要求的格式：code/message/data
         if (resp.isSuccess()) {
-            java.util.Map<String, Object> response = new java.util.HashMap<>();
+            Map<String, Object> response = new HashMap<>();
             response.put("code", 200);
             response.put("message", resp.getMessage());
             response.put("data", resp.getData());
             return ResponseEntity.ok(response);
         } else {
-            java.util.Map<String, Object> response = new java.util.HashMap<>();
+            Map<String, Object> response = new HashMap<>();
             response.put("code", 400);
             response.put("message", resp.getMessage());
             response.put("data", null);
@@ -362,19 +364,19 @@ public class UserController {
      * 获取专注记录
      */
     @GetMapping(value = "/focus/report", produces = "application/json")
-    public ResponseEntity<ApiResponse<java.util.List<FocusRecordResponse>>> getFocusReport(
+    public ResponseEntity<ApiResponse<List<FocusRecordResponse>>> getFocusReport(
             HttpServletRequest request) {
         String token = extractToken(request);
         if (token == null) {
             return ResponseEntity.badRequest().body(
-                    ApiResponse.<java.util.List<FocusRecordResponse>>builder()
+                    ApiResponse.<List<FocusRecordResponse>>builder()
                             .success(false)
                             .message("缺少 Authorization 头，格式应为: Bearer <token>")
                             .build()
             );
         }
 
-        ApiResponse<java.util.List<FocusRecordResponse>> resp = userService.getFocusReport(token);
+        ApiResponse<List<FocusRecordResponse>> resp = userService.getFocusReport(token);
         return ResponseEntity.status(resp.isSuccess() ? 200 : 400).body(resp);
     }
 
@@ -383,26 +385,26 @@ public class UserController {
      * @param report_type 报告类型，weekly（周报告）或 monthly（月报告）
      */
     @GetMapping(value = "/users/reporters", produces = "application/json")
-    public ResponseEntity<ApiResponse<java.util.List<UserReportResponse>>> getUserReports(
+    public ResponseEntity<ApiResponse<List<UserReportResponse>>> getUserReports(
             HttpServletRequest request,
             @RequestParam("report_type") String reportType) {
         String token = extractToken(request);
         if (token == null) {
             return ResponseEntity.badRequest().body(
-                    ApiResponse.<java.util.List<UserReportResponse>>builder()
+                    ApiResponse.<List<UserReportResponse>>builder()
                             .success(false)
                             .message("缺少 Authorization 头，格式应为: Bearer <token>")
                             .build()
             );
         }
 
-        ApiResponse<java.util.List<UserReportResponse>> resp = userService.getUserReports(token, reportType);
+        ApiResponse<List<UserReportResponse>> resp = userService.getUserReports(token, reportType);
         return ResponseEntity.status(resp.isSuccess() ? 200 : 400).body(resp);
     }
 
     /**
      * 获取好友统计数据
-     * @param friend_username 好友用户名
+     * @param request 好友用户名
      */
     @GetMapping(value = "/friends/stats", produces = "application/json")
     public ResponseEntity<ApiResponse<FriendStatsResponse>> getFriendStats(
@@ -431,7 +433,7 @@ public class UserController {
             @Valid @RequestBody CreateTaskRequest req) {
         String token = extractToken(request);
         if (token == null) {
-            java.util.Map<String, Object> errorResponse = new java.util.HashMap<>();
+            Map<String, Object> errorResponse = new HashMap<>();
             errorResponse.put("success", "false");
             errorResponse.put("message", "缺少 Authorization 头，格式应为: Bearer <token>");
             errorResponse.put("data", null);
@@ -441,7 +443,7 @@ public class UserController {
         ApiResponse<TaskResponse> resp = userService.createTask(token, req);
         
         // 转换为用户要求的格式：success 为字符串
-        java.util.Map<String, Object> response = new java.util.HashMap<>();
+        Map<String, Object> response = new HashMap<>();
         response.put("success", resp.isSuccess() ? "true" : "false");
         response.put("message", resp.getMessage());
         response.put("data", resp.getData());
@@ -458,13 +460,13 @@ public class UserController {
             @Valid @RequestBody UpdateTaskRequest req) {
         String token = extractToken(request);
         if (token == null) {
-            java.util.Map<String, Object> errorResponse = new java.util.HashMap<>();
+            Map<String, Object> errorResponse = new HashMap<>();
             errorResponse.put("success", false);
             errorResponse.put("message", "缺少 Authorization 头，格式应为: Bearer <token>");
             return ResponseEntity.badRequest().body(errorResponse);
         }
 
-        java.util.Map<String, Object> resp = userService.updateTask(token, req);
+        Map<String, Object> resp = userService.updateTask(token, req);
         
         return ResponseEntity.status((Boolean) resp.get("success") ? 200 : 400).body(resp);
     }
@@ -499,7 +501,7 @@ public class UserController {
             @Valid @RequestBody FriendRequestRequest req) {
         String token = extractToken(request);
         if (token == null) {
-            java.util.Map<String, Object> errorResponse = new java.util.HashMap<>();
+            Map<String, Object> errorResponse = new HashMap<>();
             errorResponse.put("success", false);
             errorResponse.put("message", "缺少 Authorization 头，格式应为: Bearer <token>");
             return ResponseEntity.badRequest().body(errorResponse);
@@ -514,19 +516,19 @@ public class UserController {
      * 查看好友申请
      */
     @GetMapping(value = "/friends/requests", produces = "application/json;charset=UTF-8")
-    public ResponseEntity<ApiResponse<java.util.List<FriendRequestResponse>>> getFriendRequests(
+    public ResponseEntity<ApiResponse<List<FriendRequestResponse>>> getFriendRequests(
             HttpServletRequest request) {
         String token = extractToken(request);
         if (token == null) {
             return ResponseEntity.badRequest().body(
-                    ApiResponse.<java.util.List<FriendRequestResponse>>builder()
+                    ApiResponse.<List<FriendRequestResponse>>builder()
                             .success(false)
                             .message("缺少 Authorization 头，格式应为: Bearer <token>")
                             .build()
             );
         }
 
-        ApiResponse<java.util.List<FriendRequestResponse>> resp = userService.getFriendRequests(token);
+        ApiResponse<List<FriendRequestResponse>> resp = userService.getFriendRequests(token);
         
         return ResponseEntity.status(resp.isSuccess() ? 200 : 400).body(resp);
     }
@@ -540,7 +542,7 @@ public class UserController {
             @Valid @RequestBody ProcessFriendRequestRequest req) {
         String token = extractToken(request);
         if (token == null) {
-            java.util.Map<String, Object> errorResponse = new java.util.HashMap<>();
+            Map<String, Object> errorResponse = new HashMap<>();
             errorResponse.put("success", false);
             errorResponse.put("message", "缺少 Authorization 头，格式应为: Bearer <token>");
             return ResponseEntity.badRequest().body(errorResponse);
@@ -555,19 +557,19 @@ public class UserController {
      * 获取好友列表
      */
     @GetMapping(value = "/friends", produces = "application/json")
-    public ResponseEntity<ApiResponse<java.util.List<FriendResponse>>> getFriends(
+    public ResponseEntity<ApiResponse<List<FriendResponse>>> getFriends(
             HttpServletRequest request) {
         String token = extractToken(request);
         if (token == null) {
             return ResponseEntity.badRequest().body(
-                    ApiResponse.<java.util.List<FriendResponse>>builder()
+                    ApiResponse.<List<FriendResponse>>builder()
                             .success(false)
                             .message("缺少 Authorization 头，格式应为: Bearer <token>")
                             .build()
             );
         }
 
-        ApiResponse<java.util.List<FriendResponse>> resp = userService.getFriends(token);
+        ApiResponse<List<FriendResponse>> resp = userService.getFriends(token);
         
         return ResponseEntity.status(resp.isSuccess() ? 200 : 400).body(resp);
     }
@@ -581,7 +583,7 @@ public class UserController {
             @Valid @RequestBody DeleteFriendRequest req) {
         String token = extractToken(request);
         if (token == null) {
-            java.util.Map<String, Object> errorResponse = new java.util.HashMap<>();
+            Map<String, Object> errorResponse = new HashMap<>();
             errorResponse.put("success", false);
             errorResponse.put("message", "缺少 Authorization 头，格式应为: Bearer <token>");
             return ResponseEntity.badRequest().body(errorResponse);

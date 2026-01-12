@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
@@ -87,6 +88,27 @@ public class AIServiceImpl implements AIService {
         System.out.println("API Key是否为默认值: " + (tongyiApiKey != null && tongyiApiKey.equals("your_tongyi_api_key_here")));
         System.out.println("API URL: " + tongyiApiUrl);
         
+        // 调试：打印上下文数据
+        System.out.println("📋 上下文数据检查:");
+        if (request.getContext() != null) {
+            System.out.println("  - Context不为空，包含的key: " + request.getContext().keySet());
+            if (request.getContext().containsKey("tasks")) {
+                Map<String, Object> tasks = (Map<String, Object>) request.getContext().get("tasks");
+                System.out.println("  - tasks不为空: " + (tasks != null));
+                if (tasks != null && tasks.containsKey("pending")) {
+                    List<Map<String, Object>> pendingTasks = (List<Map<String, Object>>) tasks.get("pending");
+                    System.out.println("  - 待完成任务数量: " + (pendingTasks != null ? pendingTasks.size() : 0));
+                    if (pendingTasks != null && !pendingTasks.isEmpty()) {
+                        System.out.println("  - 第一个任务详情: " + pendingTasks.get(0));
+                    }
+                }
+            } else {
+                System.out.println("  - ⚠️ Context中没有tasks字段");
+            }
+        } else {
+            System.out.println("  - ⚠️ Context为null");
+        }
+        
         boolean isApiKeyValid = tongyiApiKey != null 
                 && !tongyiApiKey.isEmpty() 
                 && !tongyiApiKey.trim().isEmpty()
@@ -114,10 +136,14 @@ public class AIServiceImpl implements AIService {
                 // 构建消息列表
                 java.util.List<java.util.Map<String, String>> messagesList = new java.util.ArrayList<>();
                 
-                // 添加系统消息
+                // 添加系统消息（包含学习上下文数据）
+                String systemPrompt = buildSystemPrompt(request.getContext());
+                System.out.println("📤 构建的系统提示词（前500字符）: " + 
+                    (systemPrompt.length() > 500 ? systemPrompt.substring(0, 500) + "..." : systemPrompt));
+                
                 java.util.Map<String, String> systemMessage = new java.util.HashMap<>();
                 systemMessage.put("role", "system");
-                systemMessage.put("content", "你是一个可爱的番茄桌宠，名字叫番茄小助手。你的性格活泼、友好、鼓励学习。你的主要职责是陪伴用户学习，提供学习建议和鼓励。回答要简洁、温暖、有趣，不要太长。");
+                systemMessage.put("content", systemPrompt);
                 messagesList.add(systemMessage);
                 
                 // 添加用户消息（保留最近10条）
@@ -138,8 +164,8 @@ public class AIServiceImpl implements AIService {
                 requestBodyMap.put("max_tokens", 500);
             } else {
                 // 标准DashScope格式
-                // 构建系统提示词
-                String systemPrompt = "你是一个可爱的番茄桌宠，名字叫番茄小助手。你的性格活泼、友好、鼓励学习。你的主要职责是陪伴用户学习，提供学习建议和鼓励。回答要简洁、温暖、有趣，不要太长。";
+                // 构建系统提示词（包含学习上下文）
+                String systemPrompt = buildSystemPrompt(request.getContext());
                 
                 // 构建对话历史
                 StringBuilder conversationHistory = new StringBuilder(systemPrompt).append("\n\n");
@@ -246,6 +272,90 @@ public class AIServiceImpl implements AIService {
         } finally {
             System.out.println("=== AI服务调用结束 ===");
         }
+    }
+    
+    /**
+     * 构建系统提示词（包含学习上下文数据）
+     */
+    private String buildSystemPrompt(Map<String, Object> context) {
+        StringBuilder prompt = new StringBuilder();
+        prompt.append("你是一个可爱的番茄桌宠，名字叫番茄小助手。你的性格活泼、友好、鼓励学习。你的主要职责是陪伴用户学习，提供学习建议和鼓励。回答要简洁、温暖、有趣，不要太长。");
+        
+        // 如果有学习上下文数据，添加到提示词中
+        if (context != null && !context.isEmpty()) {
+            prompt.append("\n\n【用户学习数据】");
+            
+            // 用户信息
+            if (context.containsKey("user")) {
+                Map<String, Object> user = (Map<String, Object>) context.get("user");
+                prompt.append("\n用户名: ").append(user.get("username"));
+                prompt.append("，当前番茄数: ").append(user.get("tomato"));
+            }
+            
+            // 今日统计
+            if (context.containsKey("today")) {
+                Map<String, Object> today = (Map<String, Object>) context.get("today");
+                prompt.append("\n今日学习数据:");
+                prompt.append("\n  - 学习时长: ").append(today.get("studyTime")).append(" 分钟");
+                prompt.append("\n  - 完成任务数: ").append(today.get("completedTasks"));
+                prompt.append("\n  - 总任务数: ").append(today.get("totalTasks"));
+            }
+            
+            // 待完成任务
+            if (context.containsKey("tasks")) {
+                Map<String, Object> tasks = (Map<String, Object>) context.get("tasks");
+                List<Map<String, Object>> pendingTasks = (List<Map<String, Object>>) tasks.get("pending");
+                
+                System.out.println("📝 处理待完成任务，数量: " + (pendingTasks != null ? pendingTasks.size() : 0));
+                
+                if (pendingTasks != null && !pendingTasks.isEmpty()) {
+                    prompt.append("\n待完成任务列表:");
+                    for (int i = 0; i < Math.min(pendingTasks.size(), 10); i++) {
+                        Map<String, Object> task = pendingTasks.get(i);
+                        
+                        // 尝试多种字段名获取任务名称（支持name, task_name, taskName）
+                        String taskName = null;
+                        if (task.get("name") != null && !task.get("name").toString().trim().isEmpty()) {
+                            taskName = task.get("name").toString().trim();
+                        } else if (task.get("task_name") != null && !task.get("task_name").toString().trim().isEmpty()) {
+                            taskName = task.get("task_name").toString().trim();
+                        } else if (task.get("taskName") != null && !task.get("taskName").toString().trim().isEmpty()) {
+                            taskName = task.get("taskName").toString().trim();
+                        }
+                        
+                        // 如果所有字段都为空，使用默认值
+                        if (taskName == null || taskName.isEmpty()) {
+                            taskName = "未命名任务";
+                            System.out.println("  ⚠️ 任务" + (i + 1) + "名称为空，使用默认值");
+                        }
+                        
+                        Object durationObj = task.get("duration");
+                        String duration = durationObj != null ? durationObj.toString() : "25";
+                        
+                        System.out.println("  - 任务" + (i + 1) + ": " + taskName + " (时长: " + duration + "分钟)");
+                        System.out.println("    任务原始数据: " + task);
+                        
+                        prompt.append("\n  ").append(i + 1).append(". ")
+                             .append(taskName)
+                             .append("（预计").append(duration).append("分钟）");
+                        if (task.get("note") != null && !task.get("note").toString().isEmpty()) {
+                            prompt.append(" - ").append(task.get("note"));
+                        }
+                    }
+                    System.out.println("✅ 任务列表已添加到提示词");
+                } else {
+                    System.out.println("⚠️ 待完成任务列表为空");
+                    prompt.append("\n待完成任务列表: 暂无待完成任务");
+                }
+            } else {
+                System.out.println("⚠️ Context中没有tasks字段");
+            }
+            
+            prompt.append("\n\n重要提示：当用户询问任务相关问题时，你必须使用上述【待完成任务列表】中的真实任务名称来回答，绝对不要使用'任务A'、'任务B'这样的占位符。如果列表中有任务，请直接使用任务的实际名称。");
+            prompt.append("\n\n请根据以上数据，结合用户的问题，给出个性化的学习建议。");
+        }
+        
+        return prompt.toString();
     }
     
     /**
