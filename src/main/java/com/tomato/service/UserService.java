@@ -1531,13 +1531,43 @@ public class UserService {
                 // 始终使用用户当前的 status 字段，而不是 friend 表中缓存的 friend_status
                 String currentStatus = friendUser.getStatus() != null ? friendUser.getStatus() : "离线";
 
-                FriendResponse response = FriendResponse.builder()
+                // 获取好友的隐私设置
+                UserPrivacy friendPrivacy = userPrivacyMapper.findByUserId(friend.getFriendId());
+
+                // 构建响应对象（不再返回邮箱）
+                FriendResponse.FriendResponseBuilder responseBuilder = FriendResponse.builder()
                         .friend_id(friend.getFriendId())
                         .friend_username(friendUser.getUsername())
                         .friend_status(currentStatus)
-                        .build();
+                        .avatar(friendUser.getAvatar());
 
-                responseList.add(response);
+                // 根据隐私设置决定是否返回生日
+                if (friendPrivacy != null && friendPrivacy.getShowBirthday() != null) {
+                    String showBirthday = friendPrivacy.getShowBirthday();
+                    if ("public".equals(showBirthday) || "friends".equals(showBirthday)) {
+                        if (friendUser.getBirthday() != null) {
+                            responseBuilder.birthday(friendUser.getBirthday().toString());
+                        }
+                    }
+                } else {
+                    // 如果没有隐私设置，默认显示（向后兼容）
+                    if (friendUser.getBirthday() != null) {
+                        responseBuilder.birthday(friendUser.getBirthday().toString());
+                    }
+                }
+
+                // 根据隐私设置决定是否返回地区
+                if (friendPrivacy != null && friendPrivacy.getShowLocation() != null) {
+                    String showLocation = friendPrivacy.getShowLocation();
+                    if ("public".equals(showLocation) || "friends".equals(showLocation)) {
+                        responseBuilder.province(friendUser.getProvince());
+                    }
+                } else {
+                    // 如果没有隐私设置，默认显示（向后兼容）
+                    responseBuilder.province(friendUser.getProvince());
+                }
+
+                responseList.add(responseBuilder.build());
             }
         }
 
