@@ -401,6 +401,28 @@ public class UserController {
     }
 
     /**
+     * 获取好友统计数据
+     * @param friend_username 好友用户名
+     */
+    @GetMapping(value = "/friends/stats", produces = "application/json")
+    public ResponseEntity<ApiResponse<FriendStatsResponse>> getFriendStats(
+            HttpServletRequest request,
+            @RequestParam("friend_username") String friendUsername) {
+        String token = extractToken(request);
+        if (token == null) {
+            return ResponseEntity.badRequest().body(
+                    ApiResponse.<FriendStatsResponse>builder()
+                            .success(false)
+                            .message("缺少 Authorization 头，格式应为: Bearer <token>")
+                            .build()
+            );
+        }
+
+        ApiResponse<FriendStatsResponse> resp = userService.getFriendStats(token, friendUsername);
+        return ResponseEntity.status(resp.isSuccess() ? 200 : 400).body(resp);
+    }
+
+    /**
      * 创建待办任务
      */
     @PostMapping(value = "/tasks", consumes = "application/json", produces = "application/json")

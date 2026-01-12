@@ -1625,6 +1625,141 @@ public class UserService {
     }
 
     /**
+     * 获取好友统计数据
+     * @param token 当前用户的token
+     * @param friendUsername 好友用户名
+     */
+    public ApiResponse<FriendStatsResponse> getFriendStats(String token, String friendUsername) {
+        Long currentUserId = getUserIdFromToken(token);
+        if (currentUserId == null) {
+            return ApiResponse.<FriendStatsResponse>builder()
+                    .success(false)
+                    .message("无效的 token")
+                    .build();
+        }
+
+        // 查找好友用户
+        User friendUser = userMapper.findByUsername(friendUsername);
+        if (friendUser == null) {
+            return ApiResponse.<FriendStatsResponse>builder()
+                    .success(false)
+                    .message("用户不存在")
+                    .build();
+        }
+
+        Long friendUserId = friendUser.getUserId();
+
+        // 验证是否是好友关系
+        boolean isFriend = friendMapper.existsByUserIdAndFriendId(currentUserId, friendUserId) ||
+                          friendMapper.existsByUserIdAndFriendId(friendUserId, currentUserId);
+        if (!isFriend) {
+            return ApiResponse.<FriendStatsResponse>builder()
+                    .success(false)
+                    .message("该用户不是您的好友")
+                    .build();
+        }
+
+        // 检查隐私设置
+        UserPrivacy privacy = userPrivacyMapper.findByUserId(friendUserId);
+        if (privacy != null && "private".equals(privacy.getShowStudyTime())) {
+            return ApiResponse.<FriendStatsResponse>builder()
+                    .success(false)
+                    .message("该用户已设置隐私，不允许查看学习时间")
+                    .build();
+        }
+
+        // 计算统计数据
+        LocalDate today = LocalDate.now();
+
+        // 1. 今日番茄数（今日完成的任务数）
+        LocalDateTime todayStart = today.atStartOfDay();
+        LocalDateTime todayEnd = today.plusDays(1).atStartOfDay();
+        List<Task> todayCompletedTasks = taskMapper.findCompletedTasksByUserIdAndTimeRange(
+                friendUserId, todayStart, todayEnd);
+        int todayTomatoes = todayCompletedTasks.size();
+
+        // 2. 本周学习时长（按天统计）
+        List<FriendStatsResponse.WeeklyHourData> weeklyHours = new java.util.ArrayList<>();
+        String[] dayNames = {"周一", "周二", "周三", "周四", "周五", "周六", "周日"};
+        for (int i = 6; i >= 0; i--) {
+            LocalDate date = today.minusDays(i);
+            LocalDateTime dayStart = date.atStartOfDay();
+            LocalDateTime dayEnd = date.plusDays(1).atStartOfDay();
+            
+            List<Task> dayTasks = taskMapper.findCompletedTasksByUserIdAndTimeRange(
+                    friendUserId, dayStart, dayEnd);
+            int totalMinutes = dayTasks.stream()
+                    .mapToInt(task -> task.getActualDuration() != null ? task.getActualDuration() : 0)
+                    .sum();
+            int hours = totalMinutes / 60; // 转换为小时
+            
+            weeklyHours.add(FriendStatsResponse.WeeklyHourData.builder()
+                    .day(dayNames[6 - i])
+                    .hours(hours)
+                    .build());
+        }
+
+        // 3. 本月任务完成数（按日期统计，每5天一个点）
+        List<FriendStatsResponse.MonthlyTaskData> monthlyTasks = new java.util.ArrayList<>();
+        int currentMonth = today.getMonthValue();
+        int currentYear = today.getYear();
+        LocalDate monthEnd = today;
+        
+        // 统计每5天的任务完成数
+        for (int day = 1; day <= monthEnd.getDayOfMonth(); day += 5) {
+            LocalDate startDate = LocalDate.of(currentYear, currentMonth, day);
+            LocalDate endDate = startDate.plusDays(4);
+            if (endDate.isAfter(monthEnd)) {
+                endDate = monthEnd;
+            }
+            
+            LocalDateTime rangeStart = startDate.atStartOfDay();
+            LocalDateTime rangeEnd = endDate.plusDays(1).atStartOfDay();
+            
+            List<Task> rangeTasks = taskMapper.findCompletedTasksByUserIdAndTimeRange(
+                    friendUserId, rangeStart, rangeEnd);
+            
+            monthlyTasks.add(FriendStatsResponse.MonthlyTaskData.builder()
+                    .date(String.valueOf(day))
+                    .count(rangeTasks.size())
+                    .build());
+        }
+
+        // 4. 最常学习的科目（按任务名称统计，取前3个）
+        List<Task> allCompletedTasks = taskMapper.findByUserIdAndStatus(friendUserId, "已完成");
+        Map<String, Integer> subjectCount = new java.util.HashMap<>();
+        for (Task task : allCompletedTasks) {
+            String taskName = task.getTaskName();
+            if (taskName != null && !taskName.trim().isEmpty()) {
+                subjectCount.put(taskName, subjectCount.getOrDefault(taskName, 0) + 1);
+            }
+        }
+        
+        List<FriendStatsResponse.TopSubjectData> topSubjects = subjectCount.entrySet().stream()
+                .sorted((e1, e2) -> e2.getValue().compareTo(e1.getValue()))
+                .limit(3)
+                .map(entry -> FriendStatsResponse.TopSubjectData.builder()
+                        .name(entry.getKey())
+                        .count(entry.getValue())
+                        .build())
+                .collect(Collectors.toList());
+
+        // 构建响应
+        FriendStatsResponse stats = FriendStatsResponse.builder()
+                .todayTomatoes(todayTomatoes)
+                .weeklyHours(weeklyHours)
+                .monthlyTasks(monthlyTasks)
+                .topSubjects(topSubjects)
+                .build();
+
+        return ApiResponse.<FriendStatsResponse>builder()
+                .success(true)
+                .message("获取好友统计数据成功")
+                .data(stats)
+                .build();
+    }
+
+    /**
      * 将 User 实体转换为 UserResponse DTO
      */
     private UserResponse convertToUserResponse(User user) {
