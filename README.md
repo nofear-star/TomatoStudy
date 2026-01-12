@@ -42,29 +42,38 @@ config/         # 配置模块 - 系统配置
 security/       # 安全模块 - 认证授权
 ```
 ## 📁 项目结构
+
+```
 backend/
-├── src/main/java/com/tomato/
-│   ├── TomatoApplication.java          # 主应用类
-│   ├── common/                         # 公共类
-│   │   ├── ApiResponse.java           # 统一响应格式
-│   │   └── GlobalExceptionHandler.java # 全局异常处理
-│   ├── config/                         # 配置类
-│   │   ├── SecurityConfig.java        # Spring Security 配置
-│   │   ├── CorsConfig.java            # 跨域配置
-│   │   ├── MyBatisPlusConfig.java     # MyBatis Plus 配置
-│   │   └── WebConfig.java             # Web 配置
-│   ├── security/                      # 安全相关
-│   │   ├── JwtUtil.java               # JWT 工具类
-│   │   ├── JwtFilter.java             # JWT 过滤器
-│   │   └── TokenBlacklistService.java # Token 黑名单服务
-│   ├── entity/                        # 实体类
-│   ├── mapper/                        # MyBatis Mapper 接口
-│   ├── service/                       # 服务层
-│   ├── controller/                    # 控制器层
-│   └── dto/                           # 数据传输对象
-└── src/main/resources/
-├── application.yml                # 配置文件
-└── mapper/                        # MyBatis XML 映射文件
+├── src/
+│   ├── main/
+│   │   ├── java/com/tomato/
+│   │   │   ├── TomatoApplication.java          # 主应用类
+│   │   │   ├── common/                         # 公共类
+│   │   │   │   ├── ApiResponse.java            # 统一响应格式
+│   │   │   │   └── GlobalExceptionHandler.java # 全局异常处理
+│   │   │   ├── config/                         # 配置类
+│   │   │   │   ├── SecurityConfig.java         # Spring Security 配置
+│   │   │   │   ├── CorsConfig.java             # 跨域配置
+│   │   │   │   ├── MyBatisPlusConfig.java      # MyBatis Plus 配置
+│   │   │   │   └── WebConfig.java              # Web 配置
+│   │   │   ├── security/                       # 安全相关
+│   │   │   │   ├── JwtUtil.java                # JWT 工具类
+│   │   │   │   ├── JwtFilter.java              # JWT 过滤器
+│   │   │   │   └── TokenBlacklistService.java  # Token 黑名单服务
+│   │   │   ├── entity/                          # 实体类
+│   │   │   ├── mapper/                          # MyBatis Mapper 接口
+│   │   │   ├── service/                         # 服务层
+│   │   │   ├── controller/                      # 控制器层
+│   │   │   └── dto/                             # 数据传输对象
+│   │   └── resources/
+│   │       ├── application.yml                  # 配置文件
+│   │       └── mapper/                          # MyBatis XML 映射文件
+│   └── test/                                     # 测试代码
+├── pom.xml                                       # Maven 配置文件
+├── README.md                                     # 项目说明文档
+└── API_DOCUMENTATION.md                          # API 接口文档
+```
 ## 🗄️ 数据库设计
 
 ### 核心数据表（12张）
