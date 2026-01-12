@@ -107,6 +107,15 @@ public class RoomController {
     }
 
     /**
+     * 房主退出自习室（房主身份转移给下一个成员）
+     */
+    @PostMapping("/{roomId}/leave-as-host")
+    public ResponseEntity<ApiResponse<Void>> leaveRoomAsHost(@PathVariable Long roomId, @RequestParam Long userId) {
+        roomService.leaveRoomAsHost(roomId, userId);
+        return ResponseEntity.ok(ApiResponse.success("退出成功，房主身份已转移", null));
+    }
+
+    /**
      * 获取自习室成员列表
      */
     @GetMapping("/{roomId}/members")

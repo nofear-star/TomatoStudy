@@ -210,6 +210,54 @@ public class RoomServiceImpl extends ServiceImpl<RoomMapper, Room> implements Ro
 
     @Override
     @Transactional
+    public void leaveRoomAsHost(Long roomId, Long userId) {
+        Room room = findRoomByBusinessId(roomId);
+        
+        // 验证是否为房主
+        if (!room.getCreatePerson().equals(userId)) {
+            throw new IllegalArgumentException("只有房主可以执行此操作");
+        }
+        
+        // 查找当前房主成员记录
+        LambdaQueryWrapper<RoomMember> hostWrapper = new LambdaQueryWrapper<>();
+        hostWrapper.eq(RoomMember::getRoomId, roomId)
+                   .eq(RoomMember::getUserId, userId)
+                   .eq(RoomMember::getRole, MEMBER_ROLE_HOST);
+        RoomMember hostMember = roomMemberMapper.selectOne(hostWrapper);
+        if (hostMember == null) {
+            throw new IllegalArgumentException("房主成员记录不存在");
+        }
+        
+        // 获取所有成员（按加入时间排序，最早的在前面）
+        List<RoomMember> allMembers = roomMemberMapper.selectMembersByRoomId(roomId);
+        
+        // 找到下一个成员（排除当前房主）
+        RoomMember nextHost = allMembers.stream()
+                .filter(m -> !m.getUserId().equals(userId))
+                .findFirst()
+                .orElse(null);
+        
+        if (nextHost == null) {
+            // 如果没有其他成员，直接解散房间
+            deleteRoom(roomId, userId);
+            return;
+        }
+        
+        // 将房主身份转移给下一个成员
+        // 1. 更新房间的 create_person
+        room.setCreatePerson(nextHost.getUserId());
+        updateById(room);
+        
+        // 2. 更新下一个成员的 role 为房主
+        nextHost.setRole(MEMBER_ROLE_HOST);
+        roomMemberMapper.updateById(nextHost);
+        
+        // 3. 删除当前房主的成员记录
+        roomMemberMapper.deleteById(hostMember.getId());
+    }
+
+    @Override
+    @Transactional
     public void leaveAllRooms(Long userId) {
         // 查找用户所在的所有房间
         List<RoomMember> members = roomMemberMapper.findAllByUserId(userId);

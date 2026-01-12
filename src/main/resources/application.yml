@@ -28,7 +28,7 @@ spring:
     driver-class-name: com.mysql.cj.jdbc.Driver
     url: jdbc:mysql://localhost:3306/tomato_study_room?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
     username: root
-    password: 1939366582
+    password: Zhang&7713
   jackson:
     time-zone: GMT+8
     date-format: yyyy-MM-dd HH:mm:ss
